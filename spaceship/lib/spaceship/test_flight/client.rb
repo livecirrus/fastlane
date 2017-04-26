@@ -103,7 +103,7 @@ module Spaceship::TestFlight
 
     def get_groups(app_id: nil)
       assert_required_params(__method__, binding)
-      response = request(:get, "/testflight/v2/providers/#{team_id}/apps/#{app_id}/groups")
+      response = request(:get, "providers/#{team_id}/apps/#{app_id}/groups")
       handle_response(response)
     end
 
