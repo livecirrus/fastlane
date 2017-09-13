@@ -12,12 +12,6 @@ require 'cgi'
 
 Faraday::Utils.default_params_encoder = Faraday::FlatParamsEncoder
 
-if ENV["SPACESHIP_DEBUG"]
-  require 'openssl'
-  # this has to be on top of this file, since the value can't be changed later
-  OpenSSL::SSL::VERIFY_PEER = OpenSSL::SSL::VERIFY_NONE
-end
-
 module Spaceship
   # rubocop:disable Metrics/ClassLength
   class Client
@@ -28,6 +22,9 @@ module Spaceship
 
     # The user that is currently logged in
     attr_accessor :user
+
+    # The email of the user that is currently logged in
+    attr_accessor :user_email
 
     # The logger in which all requests are logged
     # /tmp/spaceship[time]_[pid].log by default
@@ -137,6 +134,50 @@ module Spaceship
       end
     end
 
+    # Fetch the general information of the user, is used by various methods across spaceship
+    # Sample return value
+    # => {"associatedAccounts"=>
+    #   [{"contentProvider"=>{"contentProviderId"=>11142800, "name"=>"Felix Krause", "contentProviderTypes"=>["Purple Software"]}, "roles"=>["Developer"], "lastLogin"=>1468784113000}],
+    #  "sessionToken"=>{"dsId"=>"8501011116", "contentProviderId"=>18111111, "expirationDate"=>nil, "ipAddress"=>nil},
+    #  "permittedActivities"=>
+    #   {"EDIT"=>
+    #     ["UserManagementSelf",
+    #      "GameCenterTestData",
+    #      "AppAddonCreation"],
+    #    "REPORT"=>
+    #     ["UserManagementSelf",
+    #      "AppAddonCreation"],
+    #    "VIEW"=>
+    #     ["TestFlightAppExternalTesterManagement",
+    #      ...
+    #      "HelpGeneral",
+    #      "HelpApplicationLoader"]},
+    #  "preferredCurrencyCode"=>"EUR",
+    #  "preferredCountryCode"=>nil,
+    #  "countryOfOrigin"=>"AT",
+    #  "isLocaleNameReversed"=>false,
+    #  "feldsparToken"=>nil,
+    #  "feldsparChannelName"=>nil,
+    #  "hasPendingFeldsparBindingRequest"=>false,
+    #  "isLegalUser"=>false,
+    #  "userId"=>"1771111155",
+    #  "firstname"=>"Detlef",
+    #  "lastname"=>"Mueller",
+    #  "isEmailInvalid"=>false,
+    #  "hasContractInfo"=>false,
+    #  "canEditITCUsersAndRoles"=>false,
+    #  "canViewITCUsersAndRoles"=>true,
+    #  "canEditIAPUsersAndRoles"=>false,
+    #  "transporterEnabled"=>false,
+    #  "contentProviderFeatures"=>["APP_SILOING", "PROMO_CODE_REDESIGN", ...],
+    #  "contentProviderType"=>"Purple Software",
+    #  "displayName"=>"Detlef",
+    #  "contentProviderId"=>"18742800",
+    #  "userFeatures"=>[],
+    #  "visibility"=>true,
+    #  "DYCVisibility"=>false,
+    #  "contentProvider"=>"Felix Krause",
+    #  "userName"=>"detlef@krausefx.com"}
     def user_details_data
       return @_cached_user_details if @_cached_user_details
       r = request(:get, '/WebObjects/iTunesConnect.woa/ra/user/detail')
@@ -169,7 +210,7 @@ module Spaceship
       end
 
       unless result
-        raise ITunesConnectError.new, "Could not set team ID to '#{team_id}', only found the following available teams: #{available_teams.join(', ')}"
+        raise TunesClient::ITunesConnectError.new, "Could not set team ID to '#{team_id}', only found the following available teams: #{available_teams.join(', ')}"
       end
 
       response = request(:post) do |req|
@@ -184,6 +225,13 @@ module Spaceship
       handle_itc_response(response.body)
 
       @current_team_id = team_id
+    end
+
+    # @return (Hash) Fetches all information of the currently used team
+    def team_information
+      teams.find do |t|
+        t['teamId'] == team_id
+      end
     end
 
     # Instantiates a client but with a cookie derived from another client.
@@ -213,6 +261,7 @@ module Spaceship
           # for debugging only
           # This enables tracking of networking requests using Charles Web Proxy
           c.proxy "https://127.0.0.1:8888"
+          c.ssl[:verify_mode] = OpenSSL::SSL::VERIFY_NONE
         end
 
         if ENV["DEBUG"]
@@ -350,7 +399,7 @@ module Spaceship
         if keychain_entry.invalid_credentials
           login(user)
         else
-          puts "Please run this tool again to apply the new password"
+          raise ex
         end
       end
     end
@@ -392,10 +441,11 @@ module Spaceship
         end
 
         response = request(:post) do |req|
-          req.url "https://idmsa.apple.com/appleauth/auth/signin?widgetKey=#{itc_service_key}"
+          req.url "https://idmsa.apple.com/appleauth/auth/signin"
           req.body = data.to_json
           req.headers['Content-Type'] = 'application/json'
           req.headers['X-Requested-With'] = 'XMLHttpRequest'
+          req.headers['X-Apple-Widget-Key'] = self.itc_service_key
           req.headers['Accept'] = 'application/json, text/javascript'
           req.headers["Cookie"] = modified_cookie if modified_cookie
         end
@@ -403,23 +453,22 @@ module Spaceship
         raise InvalidUserCredentialsError.new, "Invalid username and password combination. Used '#{user}' as the username."
       end
 
-      # get `woinst` and `wois` cookie values
-      request(:get, "https://itunesconnect.apple.com/WebObjects/iTunesConnect.woa/wa")
-
-      # Get the `itctx` from the new (22nd May 2017) API endpoint "olympus"
-      request(:get, "https://olympus.itunes.apple.com/v1/session")
+      # Now we know if the login is successful or if we need to do 2 factor
 
       case response.status
       when 403
         raise InvalidUserCredentialsError.new, "Invalid username and password combination. Used '#{user}' as the username."
       when 200
+        fetch_olympus_session
         return response
+      when 409
+        # 2 factor is enabled for this account, first handle that
+        # and then get the olympus session
+        handle_two_step(response)
+        fetch_olympus_session
+        return true
       else
-        location = response["Location"]
-        if location && URI.parse(location).path == "/auth" # redirect to 2 step auth page
-          handle_two_step(response)
-          return true
-        elsif (response.body || "").include?('invalid="true"')
+        if (response.body || "").include?('invalid="true"')
           # User Credentials are wrong
           raise InvalidUserCredentialsError.new, "Invalid username and password combination. Used '#{user}' as the username."
         elsif (response['Set-Cookie'] || "").include?("itctx")
@@ -431,6 +480,17 @@ module Spaceship
       end
     end
 
+    # Get the `itctx` from the new (22nd May 2017) API endpoint "olympus"
+    def fetch_olympus_session
+      response = request(:get, "https://olympus.itunes.apple.com/v1/session")
+      if response.body
+        user_map = response.body["user"]
+        if user_map
+          self.user_email = user_map["emailAddress"]
+        end
+      end
+    end
+
     def itc_service_key
       return @service_key if @service_key
 
@@ -438,16 +498,10 @@ module Spaceship
       itc_service_key_path = "/tmp/spaceship_itc_service_key.txt"
       return File.read(itc_service_key_path) if File.exist?(itc_service_key_path)
 
-      # Some customers in Asia have had trouble with the CDNs there that cache and serve this content, leading
-      # to "buffer error (Zlib::BufError)" from deep in the Ruby HTTP stack. Setting this header requests that
-      # the content be served only as plain-text, which seems to work around their problem, while not affecting
-      # other clients.
-      #
-      # https://github.com/fastlane/fastlane/issues/4610
-      headers = { 'Accept-Encoding' => 'identity' }
-      # We need a service key from a JS file to properly auth
-      js = request(:get, "https://itunesconnect.apple.com/itc/static-resources/controllers/login_cntrl.js", nil, headers)
-      @service_key = js.body.match(/itcServiceKey = '(.*)'/)[1]
+      response = request(:get, "https://olympus.itunes.apple.com/v1/app/config?hostname=itunesconnect.apple.com")
+      @service_key = response.body["authServiceKey"].to_s
+
+      raise "Service key is empty" if @service_key.length == 0
 
       # Cache the key locally
       File.write(itc_service_key_path, @service_key)
@@ -464,7 +518,11 @@ module Spaceship
 
     def with_retry(tries = 5, &_block)
       return yield
-    rescue Faraday::Error::ConnectionFailed, Faraday::Error::TimeoutError, AppleTimeoutError => ex # New Faraday version: Faraday::TimeoutError => ex
+    rescue \
+        Faraday::Error::ConnectionFailed,
+        Faraday::Error::TimeoutError,
+        AppleTimeoutError,
+        InternalServerError => ex # New Faraday version: Faraday::TimeoutError => ex
       tries -= 1
       unless tries.zero?
         logger.warn("Timeout received: '#{ex.message}'. Retrying after 3 seconds (remaining: #{tries})...")
@@ -628,7 +686,7 @@ module Spaceship
         end
 
         if response.body.to_s.include?("<title>302 Found</title>")
-          raise AppleTimeoutError.new, "Apple 302 detected"
+          raise AppleTimeoutError.new, "Apple 302 detected - this might be temporary server error, check https://developer.apple.com/system-status/ to see if there is a known downtime"
         end
         return response
       end

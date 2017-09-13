@@ -18,7 +18,8 @@
   <a href="https://github.com/fastlane/boarding">boarding</a> &bull;
   <b>gym</b> &bull;
   <a href="https://github.com/fastlane/fastlane/tree/master/scan">scan</a> &bull;
-  <a href="https://github.com/fastlane/fastlane/tree/master/match">match</a>
+  <a href="https://github.com/fastlane/fastlane/tree/master/match">match</a> &bull;
+  <a href="https://github.com/fastlane/fastlane/tree/master/precheck">precheck</a>
 </p>
 
 -------
@@ -32,7 +33,6 @@ gym
 
 [![Twitter: @KauseFx](https://img.shields.io/badge/contact-@FastlaneTools-blue.svg?style=flat)](https://twitter.com/FastlaneTools)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat)](https://github.com/fastlane/fastlane/blob/master/gym/LICENSE)
-[![Gem](https://img.shields.io/gem/v/gym.svg?style=flat)](https://rubygems.org/gems/gym)
 
 ###### Building your app has never been easier
 
@@ -157,7 +157,7 @@ output_name "MyApp"           # the name of the ipa file
 
 ## Export options
 
-Since Xcode 7, `gym` is using new Xcode API which allows us to specify export options using `plist` file. By default `gym` creates this file for you and you are able to modify some parameters by using `export_method`, `export_team_id`, `include_symbols` or `include_bitcode`. If you want to have more options, like creating manifest file or app thinning, you can provide your own `plist` file:
+Since Xcode 7, `gym` is using new Xcode API which allows us to specify export options using `plist` file. By default `gym` creates this file for you and you are able to modify some parameters by using `export_method`, `export_team_id`, `include_symbols` or `include_bitcode`. If you want to have more options, like creating manifest file for app thinning, you can provide your own `plist` file:
 
 ```ruby
 export_options "./ExportOptions.plist"
@@ -174,6 +174,20 @@ export_options(
   thinning: "<thin-for-all-variants>"
 )
 ```
+
+Optional: If _gym_ can't automatically detect the provisioning profiles to use, you can pass a mapping of bundle identifiers to provisioning profiles:
+
+```ruby
+export_options(
+  method: "app-store",
+  provisioningProfiles: { 
+    "com.example.bundleid" => "Provisioning Profile Name",
+    "com.example.bundleid2" => "Provisioning Profile Name 2"
+  }
+)
+```
+
+**Note**: If you use [fastlane](https://fastlane.tools) with [match](https://fastlane.tools/match) you don't need to provide those values manually.
 
 For the list of available options run `xcodebuild -help`.
 
@@ -254,18 +268,6 @@ Using this method there are no workarounds for WatchKit or Swift required, as it
 
 Note: the [xcbuild-safe.sh script](https://github.com/fastlane/fastlane/tree/master/gym/lib/assets/wrap_xcodebuild/xcbuild-safe.sh) wraps around xcodebuild to workaround some incompatibilities.
 
-### Xcode 6 and below
-
-```
-/usr/bin/xcrun /path/to/PackageApplication4Gym -v \
-'/Users/felixkrause/Library/Developer/Xcode/Archives/2015-08-11/ExampleProductName 2015-08-11 18.15.30.xcarchive/Products/Applications/name.app' -o \
-'/Users/felixkrause/Library/Developer/Xcode/Archives/2015-08-11/ExampleProductName.ipa' \
---sign "identity" --embed "provProfile"
-```
-
-Note: the official PackageApplication script is replaced by a custom PackageApplication4Gym script. This script is obtained by applying a [set of patches](https://github.com/fastlane/fastlane/tree/master/gym/lib/assets/package_application_patches) on the fly to fix some known issues in the official Xcode PackageApplication script.
-
-Afterwards the `ipa` file is moved to the output folder. The `dSYM` file is compressed and moved to the output folder as well.
 
 # Tips
 ## [`fastlane`](https://fastlane.tools) Toolchain
@@ -282,6 +284,7 @@ Afterwards the `ipa` file is moved to the output folder. The `dSYM` file is comp
 - [`boarding`](https://github.com/fastlane/boarding): The easiest way to invite your TestFlight beta testers
 - [`scan`](https://github.com/fastlane/fastlane/tree/master/scan): The easiest way to run tests of your iOS and Mac app
 - [`match`](https://github.com/fastlane/fastlane/tree/master/match): Easily sync your certificates and profiles across your team using git
+- [`precheck`](https://github.com/fastlane/fastlane/tree/master/precheck): Check your app using a community driven set of App Store review rules to avoid being rejected
 
 ##### [Do you like fastlane? Be the first to know about updates and new fastlane tools](https://tinyletter.com/fastlane-tools)
 
@@ -289,7 +292,14 @@ Afterwards the `ipa` file is moved to the output folder. The `dSYM` file is comp
 Download and install the [Provisioning Plugin](https://github.com/chockenberry/Provisioning).
 
 # Need help?
-Please submit an issue on GitHub and provide information about your setup
+
+Before submitting a new GitHub issue, please make sure to
+
+- Check out [docs.fastlane.tools](https://docs.fastlane.tools)
+- Check out the README pages on [this repo](https://github.com/fastlane/fastlane)
+- Search for [existing GitHub issues](https://github.com/fastlane/fastlane/issues)
+
+If the above doesn't help, please [submit an issue](https://github.com/fastlane/fastlane/issues) on GitHub and provide information about your setup, in particular the output of the `fastlane env` command.
 
 # Code of Conduct
 Help us keep `gym` open and inclusive. Please read and follow our [Code of Conduct](https://github.com/fastlane/fastlane/blob/master/CODE_OF_CONDUCT.md).

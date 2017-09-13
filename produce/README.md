@@ -18,7 +18,8 @@
   <a href="https://github.com/fastlane/boarding">boarding</a> &bull;
   <a href="https://github.com/fastlane/fastlane/tree/master/gym">gym</a> &bull;
   <a href="https://github.com/fastlane/fastlane/tree/master/scan">scan</a> &bull;
-  <a href="https://github.com/fastlane/fastlane/tree/master/match">match</a>
+  <a href="https://github.com/fastlane/fastlane/tree/master/match">match</a> &bull;
+  <a href="https://github.com/fastlane/fastlane/tree/master/precheck">precheck</a>
 </p>
 
 -------
@@ -32,7 +33,6 @@ produce
 
 [![Twitter: @FastlaneTools](https://img.shields.io/badge/contact-@FastlaneTools-blue.svg?style=flat)](https://twitter.com/FastlaneTools)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat)](https://github.com/fastlane/fastlane/blob/master/produce/LICENSE)
-[![Gem](https://img.shields.io/gem/v/produce.svg?style=flat)](https://rubygems.org/gems/produce)
 
 ###### Create new iOS apps on iTunes Connect and Dev Portal using your command line
 
@@ -61,6 +61,8 @@ Get in contact with the developers on Twitter: [@FastlaneTools](https://twitter.
 - **Modify** Application Services on the Apple Developer Portal
 - **Create** App Groups on the Apple Developer Portal
 - **Associate** apps with App Groups on the Apple Developer Portal
+- **Create** Merchant Identifiers on the Apple Developer Portal
+- **Associate** apps with Merchant Identifiers on the Apple Developer Portal
 - Support for **multiple Apple accounts**, storing your credentials securely in the Keychain
 
 ##### [Do you like fastlane? Be the first to know about updates and new fastlane tools](https://tinyletter.com/fastlane-tools)
@@ -80,29 +82,38 @@ To get a list of all available parameters:
     fastlane produce --help
 
 ```
-  Commands:
-    associate_group  Associate with a group, which is created if needed or simply located otherwise
-    create           Creates a new app on iTunes Connect and the Apple Developer Portal
-    disable_services Disable specific Application Services for a specific app on the Apple Developer Portal
-    enable_services  Enable specific Application Services for a specific app on the Apple Developer Portal
-    group            Ensure that a specific App Group exists
-    help             Display global or [command] help documentation
+  Commands: (* default)
+    associate_group      Associate with a group, which is created if needed or simply located otherwise
+    associate_merchant   Associate with a merchant for use with Apple Pay. Apple Pay will be enabled for this app
+    create             * Creates a new app on iTunes Connect and the Apple Developer Portal
+    disable_services     Disable specific Application Services for a specific app on the Apple Developer Portal
+    enable_services      Enable specific Application Services for a specific app on the Apple Developer Portal
+    group                Ensure that a specific App Group exists
+    help                 Display global or [command] help documentation
+    merchant             Ensure that a specific Merchant exists
 
   Global Options:
+    --verbose
+    -h, --help           Display help documentation
+    -v, --version        Display version information
+
+  Options for create:
     -u, --username STRING Your Apple ID Username (PRODUCE_USERNAME)
     -a, --app_identifier STRING App Identifier (Bundle ID, e.g. com.krausefx.app) (PRODUCE_APP_IDENTIFIER)
     -e, --bundle_identifier_suffix STRING App Identifier Suffix (Ignored if App Identifier does not ends with .*) (PRODUCE_APP_IDENTIFIER_SUFFIX)
     -q, --app_name STRING App Name (PRODUCE_APP_NAME)
     -z, --app_version STRING Initial version number (e.g. '1.0') (PRODUCE_VERSION)
     -y, --sku STRING     SKU Number (e.g. '1234') (PRODUCE_SKU)
+    -j, --platform STRING The platform to use (optional) (PRODUCE_PLATFORM)
     -m, --language STRING Primary Language (e.g. 'English', 'German') (PRODUCE_LANGUAGE)
     -c, --company_name STRING The name of your company. Only required if it's the first app you create (PRODUCE_COMPANY_NAME)
-    -i, --skip_itc       Skip the creation of the app on iTunes Connect (PRODUCE_SKIP_ITC)
-    -d, --skip_devcenter  Skip the creation of the app on the Apple Developer Portal (PRODUCE_SKIP_DEVCENTER)
-    -b, --team_id STRING The ID of your team if you're in multiple teams (PRODUCE_TEAM_ID)
-    -l, --team_name STRING The name of your team if you're in multiple teams (PRODUCE_TEAM_NAME)
-    -h, --help           Display help documentation
-    -v, --version        Display version information
+    -i, --skip_itc [VALUE] Skip the creation of the app on iTunes Connect (PRODUCE_SKIP_ITC)
+    -d, --skip_devcenter [VALUE] Skip the creation of the app on the Apple Developer Portal (PRODUCE_SKIP_DEVCENTER)
+    -s, --itc_users ARRAY Array of iTunes Connect users. If provided, you can limit access to this newly created app for users with the App Manager, Developer, Marketer or Sales roles (ITC_USERS)
+    -b, --team_id STRING The ID of your Developer Portal team if you're in multiple teams (PRODUCE_TEAM_ID)
+    -l, --team_name STRING The name of your Developer Portal team if you're in multiple teams (PRODUCE_TEAM_NAME)
+    -k, --itc_team_id [VALUE] The ID of your iTunes Connect team if you're in multiple teams (PRODUCE_ITC_TEAM_ID)
+    -p, --itc_team_name STRING The name of your iTunes Connect team if you're in multiple teams (PRODUCE_ITC_TEAM_NAME)
 ```
 
 ## Enabling / Disabling Application Services
@@ -167,6 +178,37 @@ Get a list of all available options using
     --vpn-conf           Disable VPN Configuration
 ```
 
+## Creating Apple Pay merchants and associating them with an App ID
+
+If you want to create a new Apple Pay Merchant Identifier:
+
+```
+fastlane produce merchant -o merchant.com.example.production -r "Example Merchant Production"
+```
+
+Use `--help` for more information about all available parameters
+```
+fastlane produce merchant --help
+```
+
+If you want to associate an app with a Merchant Identifier:
+
+```
+fastlane produce associate_merchant -a com.krausefx.app merchant.com.example.production
+```
+
+If you want to associate an app with multiple Merchant Identifiers:
+
+```
+fastlane produce associate_merchant -a com.krausefx.app merchant.com.example.production merchant.com.example.sandbox
+```
+
+Use --help for more information about all available parameters
+
+```
+fastlane produce associate_merchant --help
+```
+
 ## Environment Variables
 
 All available values can also be passed using environment variables, run `fastlane produce --help` to get a list of all available parameters.
@@ -184,6 +226,26 @@ lane :release do
     app_version: '1.0',
     sku: '123',
     team_name: 'SunApps GmbH' # only necessary when in multiple teams
+    
+    # Optional
+    # App services can be enabled during app creation
+    enable_services: {
+      app_group: "on"               # Valid values: "on", "off"
+      apple_pay: "on"               # Valid values: "on", "off"
+      associated_domains: "on"      # Valid values: "on", "off"
+      data_protection: "complete"   # Valid values: "complete", "unlessopen", "untilfirstauth"
+      game_center: "on"             # Valid values: "on", "off"
+      health_kit: "on"              # Valid values: "on", "off"
+      home_kit: "on"                # Valid values: "on", "off"
+      wireless_accessory: "on"      # Valid values: "on", "off"
+      icloud: "cloudkit"            # Valid values: "legacy", "cloudkit"
+      in_app_purchase: "on"         # Valid values: "on", "off"
+      inter_app_audio: "on"         # Valid values: "on", "off"
+      passbook: "on"                # Valid values: "on", "off"
+      push_notification: "on"       # Valid values: "on", "off"
+      siri_kit: "on"                # Valid values: "on", "off"
+      vpn_configuration: "on"       # Valid values: "on", "off"
+    }
   )
 
   deliver
@@ -219,11 +281,19 @@ You'll still have to fill out the remaining information (like screenshots, app d
 - [`gym`](https://github.com/fastlane/fastlane/tree/master/gym): Building your iOS apps has never been easier
 - [`scan`](https://github.com/fastlane/fastlane/tree/master/scan): The easiest way to run tests of your iOS and Mac app
 - [`match`](https://github.com/fastlane/fastlane/tree/master/match): Easily sync your certificates and profiles across your team using git
+- [`precheck`](https://github.com/fastlane/fastlane/tree/master/precheck): Check your app using a community driven set of App Store review rules to avoid being rejected
 
 ##### [Do you like fastlane? Be the first to know about updates and new fastlane tools](https://tinyletter.com/fastlane-tools)
 
 # Need help?
-Please submit an issue on GitHub and provide information about your setup
+
+Before submitting a new GitHub issue, please make sure to
+
+- Check out [docs.fastlane.tools](https://docs.fastlane.tools)
+- Check out the README pages on [this repo](https://github.com/fastlane/fastlane)
+- Search for [existing GitHub issues](https://github.com/fastlane/fastlane/issues)
+
+If the above doesn't help, please [submit an issue](https://github.com/fastlane/fastlane/issues) on GitHub and provide information about your setup, in particular the output of the `fastlane env` command.
 
 # Code of Conduct
 Help us keep `produce` open and inclusive. Please read and follow our [Code of Conduct](https://github.com/fastlane/fastlane/blob/master/CODE_OF_CONDUCT.md).
